@@ -1,0 +1,9 @@
+.DS_Store
+
+# Build outputs (rebuild: xcrun swiftc -O main.swift -o kbdfu; xcrun swiftc -O leds.swift -o leds)
+kbdfu/kbdfu
+kbdfu/leds
+
+# 8BitDo firmware images (copyrighted; re-download via the API, see README)
+*.dat
+*.bin

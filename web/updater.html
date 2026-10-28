@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>8BitDo Retro Updater</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --border: #dcdcd6;
+    --accent: #c8402f; --accent-text: #ffffff; --ok: #2f7d4a; --warn: #a3620a; --err: #b3261e; --mono-bg: #f0f0ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161615; --panel: #1f1f1d; --text: #ececE6; --muted: #9a9a93; --border: #34342f;
+      --accent: #e0604d; --accent-text: #160b09; --ok: #5cbf7c; --warn: #e0a043; --err: #f07167; --mono-bg: #191917;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161615; --panel: #1f1f1d; --text: #ececE6; --muted: #9a9a93; --border: #34342f;
+    --accent: #e0604d; --accent-text: #160b09; --ok: #5cbf7c; --warn: #e0a043; --err: #f07167; --mono-bg: #191917;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 20px; color: var(--muted); }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  button, select { font: inherit; border-radius: 7px; border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 7px 12px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin-top: 10px; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+  progress { width: 100%; height: 10px; margin-top: 10px; accent-color: var(--accent); }
+  #log { background: var(--mono-bg); border: 1px solid var(--border); border-radius: 7px; padding: 10px; height: 260px; overflow: auto;
+         font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; margin: 0; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .err { color: var(--err); } .dim { color: var(--muted); }
+  #prompt { display: none; margin-top: 12px; padding: 12px; border: 1px dashed var(--accent); border-radius: 8px; }
+  label { display: inline-flex; gap: 6px; align-items: center; }
+  .notice { color: var(--muted); font-size: 13px; margin-top: 10px; }
+  .risk { margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid var(--warn); background: var(--mono-bg); border-radius: 0 7px 7px 0; font-size: 14px; }
+  .risk strong { color: var(--warn); }
+  #unsupported { display: none; border: 1px solid var(--err); background: var(--panel); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  #unsupported strong { color: var(--err); display: block; margin-bottom: 4px; }
+  #unsupported p { margin: 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>8BitDo Retro Updater</h1>
+  <div id="unsupported" role="alert"><strong></strong><p></p></div>
+  <p class="sub">Updates the Retro Keyboard (2dc8:5200) and Retro Keyboard Receiver (2dc8:5201) over WebHID. Unofficial, reverse-engineered from 8BitDo's dfu4.exe.</p>
+
+  <section>
+    <h2>1 · Device</h2>
+    <div class="row">
+      <button id="connect" class="primary">Connect device…</button>
+      <button id="btnVersion" disabled>Read version</button>
+      <button id="btnInfo" disabled>Read info</button>
+    </div>
+    <dl class="kv" id="devinfo"></dl>
+    <div id="modelRow" class="row" style="display:none; margin-top:10px">
+      <label>Keyboard model <select id="modelSel"><option value="">Choose…</option><option value="US">US (87 keys)</option><option value="UK">UK</option></select></label>
+      <span id="modelNote" class="dim"></span>
+    </div>
+    <div id="prompt">
+      <div id="promptText"></div>
+      <div class="row" style="margin-top:8px"><button id="promptBtn" class="primary">Select device…</button></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2 · Firmware</h2>
+    <div class="row">
+      <select id="fwSelect" disabled><option>Connect a device first</option></select>
+      <span class="dim">or</span>
+      <input type="file" id="fwFile" accept=".dat,.bin">
+    </div>
+    <dl class="kv" id="fwinfo"></dl>
+  </section>
+
+  <section>
+    <h2>3 · Update</h2>
+    <div class="row">
+      <button id="btnFlash" class="primary" disabled>Update firmware</button>
+    </div>
+    <progress id="progress" max="100" value="0"></progress>
+    <p class="risk"><strong>Use at your own risk.</strong> This is an unofficial tool, not made or supported by 8BitDo, and a failed update can leave a device unusable until it's reflashed. That said, it worked for me: a Retro Keyboard from 1.72 to 1.77 and two Retro Keyboard Receivers from 1.03 to 1.04, on macOS in Chrome.</p>
+    <p class="notice">Keep another input device handy: a keyboard or receiver can't type while it updates. If a receiver is left in bootloader mode (2dc8:5202), replug it, or run the update again if it failed after "Start updating".</p>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script>
+"use strict";
+const API = "https://support.8bitdo.com/restapi/link/v1/client/firmware/select";
+const VENDOR_PAGE = 0x8C;
+const APP = [{ vendorId: 0x2DC8, productId: 0x5200, name: "Retro Keyboard", fwType: 61 },
+             { vendorId: 0x2DC8, productId: 0x5201, name: "Retro Keyboard Receiver", fwType: 62 }];
+const BOOT = [{ vendorId: 0x2DC8, productId: 0x5202, name: "Receiver bootloader", fwType: 62 },
+              { vendorId: 0x248A, productId: 0xFF08, name: "Telink bootloader", fwType: 62 }];
+const ALL = [...APP, ...BOOT];
+const filtersFor = list => list.map(d => ({ vendorId: d.vendorId, productId: d.productId, usagePage: VENDOR_PAGE }));
+const known = hid => ALL.find(d => d.vendorId === hid.vendorId && d.productId === hid.productId);
+const isBootId = hid => BOOT.some(d => d.vendorId === hid.vendorId && d.productId === hid.productId);
+const hasVendorPage = hid => hid.collections.some(c => c.usagePage === VENDOR_PAGE);
+
+const $ = id => document.getElementById(id);
+const hex = a => Array.from(a, b => b.toString(16).padStart(2, "0")).join(" ");
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const logEl = $("log");
+function log(msg, cls = "") {
+  const line = document.createElement("div");
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  logEl.append(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ---------- protocol ----------
+let seq = 1, lastSent = 0;
+
+class Dev {
+  constructor(hid) {
+    this.hid = hid; this.waiter = null;
+    this.onReport = e => {
+      const r = new Uint8Array([e.reportId, ...new Uint8Array(e.data.buffer, e.data.byteOffset, e.data.byteLength)]);
+      const w = this.waiter; if (!w) return;
+      if (!w.reply) {
+        w.reply = r;
+        // Replies longer than one report (len byte > 0x19) continue in a second report
+        if (r[3] <= 0x19) w.done();
+      } else { w.extra.push(r); w.done(); }
+    };
+    hid.addEventListener("inputreport", this.onReport);
+  }
+  async open() { if (!this.hid.opened) await this.hid.open(); return this; }
+  async close() {
+    this.hid.removeEventListener("inputreport", this.onReport);
+    try { if (this.hid.opened) await this.hid.close(); } catch (_) { /* device may already be gone */ }
+  }
+  // Packet: B2 AA 55+subtype len+2 ~(len+2) seq data... sumLo sumHi, 33 bytes with the report ID
+  async send(data, { subtype = 0, quiet = false, timeout = 1000 } = {}) {
+    const p = new Uint8Array(33), n = data.length + 2;
+    p[0] = 0xB2; p[1] = 0xAA; p[2] = (0x55 + subtype) & 0xFF; p[3] = n; p[4] = ~n & 0xFF; p[5] = seq;
+    lastSent = seq; seq = seq === 255 ? 1 : seq + 1;
+    p.set(data, 6);
+    const sum = data.reduce((s, b) => (s + b) & 0xFFFF, 0);
+    p[6 + data.length] = sum & 0xFF; p[7 + data.length] = sum >> 8;
+    if (!quiet) log("-> " + hex(p), "dim");
+    const result = new Promise(resolve => {
+      const w = { reply: null, extra: [] };
+      const t = setTimeout(() => w.done(), timeout);
+      w.done = () => { clearTimeout(t); this.waiter = null; resolve(w); };
+      this.waiter = w;
+    });
+    try { await this.hid.sendReport(0xB2, p.slice(1)); }
+    catch (e) { this.waiter?.done(); log("   sendReport failed: " + e.message, "err"); return null; }
+    const w = await result;
+    if (!quiet) {
+      log(w.reply ? "<- " + hex(w.reply) : `<- (no reply within ${timeout / 1000}s)`, "dim");
+      w.extra.forEach(r => log("<+ " + hex(r), "dim"));
+    }
+    return w.reply;
+  }
+}
+
+// Reply: B1 addr 55 len ~len devSeq type echoedSeq cmd status ...
+const ack = (r, cmd) => r && r.length > 10 && r[0] === 0xB1 && (r[6] === 0xA3 || r[6] === 0xA1) && r[7] === lastSent && r[8] === cmd ? r : null;
+const cstr = (a, from, to) => new TextDecoder().decode(a.slice(from, to)).split("\0")[0];
+// The 0x61 reply from receiver app firmware is long with a nonzero "needs switch" byte; bootloaders (and the keyboard) reply short
+const inBootloader = info => !(info[3] > 9 && info[13] !== 0);
+
+// dfu4's CRC: CRC-32 (0xEDB88320, init 0xFFFFFFFF) without the final inversion
+const CRC_TABLE = (() => { const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) { let c = i; for (let k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xEDB88320 : c >>> 1; t[i] = c >>> 0; } return t; })();
+function crcNoInv(d) { let c = 0xFFFFFFFF; for (const b of d) c = (CRC_TABLE[(c ^ b) & 0xFF] ^ (c >>> 8)) >>> 0; return c >>> 0; }
+
+function parseFirmware(fw) {
+  if (fw.length < 1024 || fw.length > 0x40000) throw new Error(`unexpected firmware size ${fw.length}`);
+  if (cstr(fw, 8, 12) !== "KNLT") throw new Error("missing Telink KNLT signature at offset 8");
+  const crc = crcNoInv(fw);
+  if (crc !== 0) throw new Error(`file self-check CRC is 0x${crc.toString(16)}, expected 0 (corrupt download?)`);
+  const magic = new TextEncoder().encode("ABabJDFW");
+  let at = -1;
+  outer: for (let i = 0; i + 8 <= fw.length; i++) { for (let k = 0; k < 8; k++) if (fw[i + k] !== magic[k]) continue outer; at = i; break; }
+  if (at < 0) throw new Error("no ABabJDFW info block in file");
+  const tlv = {};
+  for (let j = at + 8; j + 1 < fw.length && fw[j] !== 0;) {
+    const t = fw[j], l = fw[j + 1]; if (j + 2 + l > fw.length) break;
+    tlv[t] = new TextDecoder().decode(fw.slice(j + 2, j + 2 + l)); j += 2 + l;
+  }
+  if (!tlv[1] || !tlv[2]) throw new Error("info block lacks vendor/version");
+  if (tlv[3] !== undefined) throw new Error("file overrides the address byte (TLV 3); not supported");
+  return { data: fw, vendor: tlv[1], version: tlv[2], crc };
+}
+
+// ---------- device discovery ----------
+let dev = null, devMeta = null, firmware = null, busy = false;
+
+// The US (firmware_type 61) and UK (88) Retro Keyboards share 2dc8:5200 and the "TL 8BiDo" tag; the only way to
+// tell them apart is which model's published version history the running firmware belongs to
+const KB_TYPES = { US: 61, UK: 88 };
+let kbVersions = null, kbModel = null;
+const verKey = v => (v || "").replace(/[^0-9]/g, "");   // "1.77" and "1.7.7r" both -> "177"
+const modelOf = v => kbVersions && Object.keys(kbVersions).find(m => kbVersions[m].has(verKey(v)));
+async function fetchCatalog(fwType) {
+  const res = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ beta: 1, firmware_type: String(fwType) }) });
+  return (await res.json()).data || [];
+}
+async function setupKeyboardModel(running) {
+  kbVersions = {};
+  for (const [m, t] of Object.entries(KB_TYPES)) kbVersions[m] = new Set((await fetchCatalog(t)).map(f => verKey(f.file_version)));
+  const detected = modelOf(running);
+  $("modelRow").style.display = "flex";
+  $("modelSel").value = detected || "";
+  $("modelSel").disabled = !!detected;
+  $("modelNote").textContent = detected ? `detected from running firmware ${running}` : `firmware ${running} isn't in either catalog; choose the model printed on your keyboard`;
+  kbModel = detected || null;
+  if (detected) await loadCatalog(KB_TYPES[detected]);
+  else { $("fwSelect").innerHTML = "<option>Choose the keyboard model first</option>"; $("fwSelect").disabled = true; }
+}
+$("modelSel").onchange = async e => { kbModel = e.target.value || null; firmware = null; $("fwinfo").innerHTML = ""; if (kbModel) await loadCatalog(KB_TYPES[kbModel]); refresh(); };
+
+// Ask the user to pick a device (WebHID needs a click for the chooser)
+function promptForDevice(text, filters) {
+  return new Promise(resolve => {
+    $("promptText").textContent = text; $("prompt").style.display = "block";
+    $("promptBtn").onclick = async () => {
+      try { const [h] = await navigator.hid.requestDevice({ filters }); $("prompt").style.display = "none"; resolve(h || null); }
+      catch (e) { log("chooser failed: " + e.message, "err"); }
+    };
+  });
+}
+
+// Poll already-permitted devices; fall back to the chooser if permission didn't carry over re-enumeration
+async function waitForDevice({ label, ids, check, timeout = 12000 }) {
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    const cands = (await navigator.hid.getDevices()).filter(h => ids.some(d => d.vendorId === h.vendorId && d.productId === h.productId) && hasVendorPage(h));
+    for (const h of cands) {
+      const d = new Dev(h);
+      try { await d.open(); if (await check(d)) return d; } catch (_) { /* not ready yet */ }
+      await d.close();
+    }
+    await sleep(300);
+  }
+  log(`${label} not visible to the page yet — select it in the chooser`, "warn");
+  const h = await promptForDevice(`Select the ${label} to continue.`, filtersFor(ids));
+  if (!h) return null;
+  const d = new Dev(h); await d.open();
+  return (await check(d)) ? d : (await d.close(), null);
+}
+
+async function readVersion(d, quiet = false) {
+  const v = ack(await d.send([0x60], { quiet }), 0x60);
+  return v ? { name: cstr(v, 10, 20), version: cstr(v, 22, 32) } : null;
+}
+
+function showDevice(meta, ver) {
+  $("devinfo").innerHTML = "";
+  const add = (k, v) => { const dt = document.createElement("dt"), dd = document.createElement("dd"); dt.textContent = k; dd.textContent = v; $("devinfo").append(dt, dd); };
+  add("Device", `${meta.name} (${meta.vendorId.toString(16).padStart(4, "0")}:${meta.productId.toString(16).padStart(4, "0")})`);
+  if (ver) { add("Reports", ver.name); add("Firmware", ver.version); }
+}
+
+async function loadCatalog(fwType) {
+  const sel = $("fwSelect");
+  sel.innerHTML = "<option>Loading versions from 8BitDo…</option>"; sel.disabled = true;
+  try {
+    const list = await fetchCatalog(fwType);
+    sel.innerHTML = '<option value="">Choose a version…</option>';
+    for (const f of list) {
+      const o = document.createElement("option");
+      o.value = f.fileURL; o.textContent = `${f.fileName} ${f.file_version} (${f.created_at})${f.beta ? " beta" : ""}`;
+      o.title = f.readme_en || ""; sel.append(o);
+    }
+    sel.disabled = false;
+  } catch (e) { sel.innerHTML = "<option>Could not load versions</option>"; log("catalog fetch failed: " + e.message, "err"); }
+}
+
+function setFirmware(fw, source) {
+  $("fwinfo").innerHTML = "";
+  try {
+    firmware = parseFirmware(fw);
+    const add = (k, v) => { const dt = document.createElement("dt"), dd = document.createElement("dd"); dt.textContent = k; dd.textContent = v; $("fwinfo").append(dt, dd); };
+    add("Source", source); add("Size", `${fw.length} bytes`); add("Vendor tag", firmware.vendor); add("Version", firmware.version); add("CRC self-check", "OK (0)");
+    log(`firmware OK: ${firmware.vendor} ${firmware.version}, ${fw.length} bytes`, "ok");
+  } catch (e) { firmware = null; log("firmware rejected: " + e.message, "err"); }
+  refresh();
+}
+
+function refresh() {
+  $("btnVersion").disabled = $("btnInfo").disabled = !dev || busy;
+  $("btnFlash").disabled = !dev || !firmware || busy || (firmware?.vendor === "TL 8BiDo" && !kbModel);
+  $("connect").disabled = busy;
+}
+
+// ---------- UI actions ----------
+$("connect").onclick = async () => {
+  if (!("hid" in navigator)) { log("WebHID isn't available. Use Chrome or Edge, served from https or http://localhost.", "err"); return; }
+  try {
+    const [h] = await navigator.hid.requestDevice({ filters: filtersFor(ALL) });
+    if (!h) return;
+    if (dev) await dev.close();
+    dev = new Dev(h); await dev.open(); devMeta = known(h);
+    log(`connected: ${devMeta.name}`, "ok");
+    const v = await readVersion(dev);
+    showDevice(devMeta, v);
+    $("modelRow").style.display = "none"; kbModel = null; kbVersions = null;
+    if (devMeta.productId === 0x5200) await setupKeyboardModel(v?.version);
+    else await loadCatalog(devMeta.fwType);
+  } catch (e) { log("connect failed: " + e.message, "err"); }
+  refresh();
+};
+$("btnVersion").onclick = async () => { busy = true; refresh(); showDevice(devMeta, await readVersion(dev)); busy = false; refresh(); };
+$("btnInfo").onclick = async () => { busy = true; refresh(); await dev.send([0x61]); busy = false; refresh(); };
+
+$("fwSelect").onchange = async e => {
+  const url = e.target.value; if (!url) return;
+  log("downloading " + url);
+  try { const buf = new Uint8Array(await (await fetch(url)).arrayBuffer()); setFirmware(buf, e.target.selectedOptions[0].textContent); }
+  catch (err) { log("download failed: " + err.message, "err"); }
+};
+$("fwFile").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  setFirmware(new Uint8Array(await f.arrayBuffer()), f.name);
+};
+
+$("btnFlash").onclick = async () => {
+  if (!confirm(`Flash ${firmware.vendor} ${firmware.version} to the ${devMeta.name}?\n\nThis is unofficial and at your own risk. The device can't type during the update.`)) return;
+  busy = true; refresh(); $("progress").value = 0;
+  try { await flash(); } catch (e) { log("ERROR: " + e.message, "err"); }
+  busy = false; refresh();
+};
+
+// ---------- the dfu4 update sequence ----------
+async function flash() {
+  const fw = firmware;
+  let d = dev;
+  const info0 = ack(await d.send([0x61]), 0x61);
+  if (!info0) throw new Error("bad 0x61 reply");
+
+  if (!inBootloader(info0)) {
+    log("switching to bootloader…");
+    await d.send([0x67]);
+    await d.close(); dev = null;
+    await sleep(1000);
+    d = await waitForDevice({ label: "receiver bootloader (2dc8:5202)", ids: BOOT, check: async c => {
+      const i = ack(await c.send([0x61], { quiet: true }), 0x61); return !!i && inBootloader(i);
+    } });
+    if (!d) throw new Error("bootloader not selected; replug the receiver to recover");
+    dev = d; devMeta = known(d.hid);
+    log(`bootloader connected: ${devMeta.name}`, "ok");
+    await sleep(500);
+  }
+
+  const v = await readVersion(d);
+  if (!v) throw new Error("bad 0x60 reply");
+  if (v.name !== fw.vendor) throw new Error(`device reports '${v.name}', file is for '${fw.vendor}'`);
+  if (fw.vendor === "TL 8BiDo") {
+    const fileModel = modelOf(fw.version);
+    if (!fileModel) throw new Error(`firmware ${fw.version} isn't a known US or UK keyboard release; refusing`);
+    if (!kbModel) throw new Error("choose the keyboard model (US or UK) first");
+    if (fileModel !== kbModel) throw new Error(`this is a ${kbModel} keyboard but ${fw.version} is ${fileModel} firmware; refusing to flash the wrong layout`);
+    log(`keyboard model ${kbModel}, file is ${fileModel} firmware`, "ok");
+  }
+  const bi = ack(await d.send([0x61]), 0x61);
+  if (!bi) throw new Error("bad 0x61 reply");
+  const proto = bi[10] | (bi[11] << 8);
+  if (proto !== 1 && proto !== 2) throw new Error(`unknown protocol ${proto}`);
+  if (!inBootloader(bi)) throw new Error("device still reports app mode");
+  const sp = ack(await d.send([0x62, 0x00]), 0x62);
+  if (!sp || sp[9] !== 0) throw new Error("set-protocol (0x62) rejected");
+  log(`update handshake OK (name ${v.name}, protocol ${proto})`, "ok");
+
+  log("Start updating");
+  if (!await d.send([0x63], { subtype: 1 })) throw new Error("no reply to 0x63; run the update again");
+  log("Writing firmware data…");
+  const data = fw.data;
+  for (let off = 0; off < data.length;) {
+    const chunk = Array.from(data.slice(off, Math.min(off + 16, data.length)));
+    let ok = false;
+    for (let attempt = 1; attempt <= 5 && !ok; attempt++) {
+      const r = await d.send([0x64, ...chunk], { subtype: 1, quiet: true });
+      if (r) {
+        if (!ack(r, 0x64)) throw new Error(`unexpected write reply at offset ${off}: ${hex(r)}; run the update again`);
+        if (off === 0) log("   first write reply: " + hex(r), "dim");
+        ok = true;
+      } else log(`   timeout at offset ${off}, retry ${attempt}/5`, "warn");
+    }
+    if (!ok) throw new Error(`write failed at offset ${off}; run the update again`);
+    off += chunk.length;
+    $("progress").value = Math.round(off * 100 / data.length);
+  }
+
+  log("Verifying…");
+  const c = fw.crc, cb = [c & 0xFF, (c >>> 8) & 0xFF, (c >>> 16) & 0xFF, c >>> 24];
+  const vr = ack(await d.send([0x65, ...cb, ...cb], { timeout: 5000 }), 0x65);
+  if (!vr || vr[10] !== 0) throw new Error("verify failed; run the update again");
+  log("Verify OK, finishing", "ok");
+  await d.send([0x66]);
+  await d.close(); dev = null;
+
+  // Confirm by reading the version back (0x61 can't tell the keyboard's app mode from a bootloader)
+  await sleep(2000);
+  const back = await waitForDevice({ label: "updated device", ids: APP, timeout: 15000, check: async c => {
+    const ver = await readVersion(c, true); return !!ver && ver.version === fw.version;
+  } });
+  if (back) {
+    dev = back; devMeta = known(back.hid);
+    showDevice(devMeta, await readVersion(back));
+    log(`device is running ${fw.version}`, "ok");
+  } else log(`could not confirm ${fw.version}; replug the device and reconnect`, "warn");
+}
+
+// WebHID exists only in Chromium browsers, and only in secure contexts (https or localhost)
+if (!("hid" in navigator)) {
+  const insecure = !window.isSecureContext;
+  const box = $("unsupported");
+  box.querySelector("strong").textContent = insecure ? "This page needs a secure connection" : "This browser can't talk to USB devices";
+  box.querySelector("p").textContent = insecure
+    ? "WebHID only works on https:// or http://localhost. Open the page from a secure address, or serve it locally with: python3 -m http.server 8000, then visit http://localhost:8000/updater.html."
+    : "The updater uses WebHID, which only Chromium-based browsers support. Open this page in Google Chrome or Microsoft Edge (or Opera) on macOS, Windows, Linux or ChromeOS. Firefox and Safari don't support WebHID.";
+  box.style.display = "block";
+  for (const id of ["connect", "fwSelect", "fwFile", "btnFlash"]) $(id).disabled = true;
+  log(box.querySelector("strong").textContent + ". " + box.querySelector("p").textContent, "err");
+}
+</script>
+</body>
+</html>
