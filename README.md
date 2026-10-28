@@ -18,8 +18,10 @@ kbdfu/main.swift          source
 kbdfu/kbdfu               arm64 binary (rebuild: xcrun swiftc -O main.swift -o kbdfu)
 kbdfu/leds(.swift)        host-side lock LED control: `leds blink|on|off num|caps|scroll`
                           (standard HID LED report, no firmware involved; the power LED isn't host-controlled)
-web/updater.html          browser port (WebHID): serve with `cd web && python3 -m http.server 8000`,
-                          open http://localhost:8000/updater.html in Chrome/Edge
+web/updater.html          browser port (WebHID), live at https://catskull.github.io/8bitdo-retro-keyboard-tools/
+                          (Chrome/Edge). Locally: `cd web && python3 -m http.server 8000`,
+                          then open http://localhost:8000/updater.html
+.github/workflows/        deploys web/ to GitHub Pages on push to master
 firmware_catalog/         raw `select` API responses per firmware_type + INDEX.txt
 ```
 
