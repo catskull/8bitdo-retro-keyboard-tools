@@ -9,6 +9,8 @@ The Mac app can't update the Retro Keyboard or its 2.4G receiver. The Windows ap
 | Retro Keyboard Receiver (×2) | `2dc8:5201` | 1.03 → 1.04 | OK |
 | Retro Keyboard | `2dc8:5200` | 1.72 → 1.77 | OK |
 
+**Web updater:** https://catskull.net/8bitdo-retro-keyboard-tools/ (Chrome or Edge, any OS with WebHID)
+
 > **Note:** this project is vibe coded. The reverse engineering, `kbdfu`, the LED tool and the web updater were all built by chatting with an AI coding assistant (Claude). They were tested on the devices above, but nobody has reviewed the code independently. Use at your own risk.
 
 ## Layout
@@ -18,7 +20,7 @@ kbdfu/main.swift          source
 kbdfu/kbdfu               arm64 binary (rebuild: xcrun swiftc -O main.swift -o kbdfu)
 kbdfu/leds(.swift)        host-side lock LED control: `leds blink|on|off num|caps|scroll`
                           (standard HID LED report, no firmware involved; the power LED isn't host-controlled)
-web/updater.html          browser port (WebHID), live at https://catskull.github.io/8bitdo-retro-keyboard-tools/
+web/updater.html          browser port (WebHID), live at https://catskull.net/8bitdo-retro-keyboard-tools/
                           (Chrome/Edge). Locally: `cd web && python3 -m http.server 8000`,
                           then open http://localhost:8000/updater.html
 .github/workflows/        deploys web/ to GitHub Pages on push to master
